@@ -31,6 +31,10 @@
 module Yast
   class InstallationClient < Client
     def main
+      # FIXME: start the debugger only when required
+      # FIXME: catch loading error, the debugger is optional (might not be present)
+      start_debugger
+
       textdomain "installation"
 
       Yast.import "Wizard"
@@ -96,6 +100,33 @@ module Yast
       WFM.CallFunction("disintegrate_all_extensions") if Stage.initial
 
       deep_copy(@ret)
+    end
+
+    private
+
+    def start_debugger
+      require "byebug"
+      Byebug.wait_connection = false
+      Byebug.start_server("localhost", 3344)
+
+      # start the debugger when receiving the SIGUSR1 signal
+      # TODO: is it safe to start it from a signal handler?
+      # TODO: does it collide with the SIGUSR1 handling yast2-core
+      # (toggling the debug logging)
+      Signal.trap("USR1") do
+        job = fork do
+            # FIXME: remove the hardcoded version (fix the alternative in inst-sys?)
+            # FIXME: this works only in the Qt UI
+            exec "xterm", "-e", "byebug.ruby2.1-3.5.1", "-R", "localhost:3344"
+        end
+        Process.detach(job)
+
+        # wait a bit for the byebug client to start
+        sleep(2)
+
+        # start the debugger
+        byebug
+      end
     end
   end
 end
